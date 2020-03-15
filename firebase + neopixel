@@ -1,0 +1,251 @@
+#include <WiFi.h>
+#include <FirebaseESP32.h>
+#include <Adafruit_NeoPixel.h>
+ 
+  // Let us connect to WiFi
+const char* ssid = "Home-8";
+const char* password = "0973039408";
+
+#define PIN 22
+#define NUM_LEDS 30
+
+// Current color values
+int redValue = 255;
+int greenValue = 0;
+int blueValue = 255;
+
+int brightness = 50;
+int delayTime = 20;
+int currentMode = 1;
+
+int this_color;
+
+FirebaseData firebaseData;
+
+Adafruit_NeoPixel strip(NUM_LEDS, PIN, NEO_GRB + NEO_KHZ800); //NEO_GRBW
+
+
+void setup() {
+ 
+  Serial.begin(115200);
+ 
+  WiFi.begin(ssid, password);
+  if (WiFi.status() != WL_CONNECTED) {
+    delay(500);
+    Serial.println("Connecting to WiFi..");
+  }
+  Firebase.begin("esp32-157f8.firebaseio.com", "slvOIZIU3ASV1OjzgPfGUuNz7fI98tswo0K31ZeB");
+  Serial.println("Connected to the WiFi network");
+  Serial.println(WiFi.localIP());
+
+  strip.setBrightness(brightness);
+  strip.begin();
+  
+}
+
+
+ 
+void loop() {
+  getData();
+  mainLoop();
+}
+
+void mainLoop() {
+  
+  switch (currentMode) {
+    case 1:
+       Serial.println("Mode #1");
+       setLedColor();
+       break;
+     case 2:
+       for (int i=0; i < NUM_LEDS; i++) {
+        strip.setPixelColor(i, strip.Color(255, 0, 0));
+        strip.show();
+       } 
+       Serial.println("Mode 2");
+       break;
+     case 3: 
+       theaterChaseRainbow(delayTime);
+       Serial.println("Mode 3");
+       break;
+     case 4: 
+       rainbow(delayTime);
+       Serial.println("Mode 4");
+       break;
+     case 5: 
+       rainbowCycle(delayTime);
+       Serial.println("Mode 4");
+       break;
+     default:
+       Serial.println("Error");
+       break;
+  }
+}
+
+// Плавная смена цвета
+void rainbow(uint8_t wait) {
+  uint16_t i, j;
+
+  for(j=0; j<256; j++) {
+    for(i=0; i<strip.numPixels(); i++) {
+      strip.setPixelColor(i, Wheel((i+j) & 255));
+    }
+    strip.show();
+    delay(wait);
+  }
+}
+
+// Бегущая радуга
+void rainbowCycle(uint8_t wait) {
+  uint16_t i, j;
+
+  for(j=0; j<256*5; j++) { // 5 cycles of all colors on wheel
+    for(i=0; i< strip.numPixels(); i++) {
+      strip.setPixelColor(i, Wheel(((i * 256 / strip.numPixels()) + j) & 255));
+    }
+    strip.show();
+  }
+}
+
+void theaterChaseRainbow(uint8_t wait) {
+  for (int j=0; j < 256; j++) {     // cycle all 256 colors in the wheel
+    for (int q=0; q < 3; q++) {
+      for (uint16_t i=0; i < strip.numPixels(); i=i+3) {
+        strip.setPixelColor(i+q, Wheel( (i+j) % 255));    //turn every third pixel on
+      }
+      strip.show();
+
+      delay(wait);
+
+      for (uint16_t i=0; i < strip.numPixels(); i=i+3) {
+        strip.setPixelColor(i+q, 0);        //turn every third pixel off
+      }
+    }
+  }
+}
+
+uint32_t Wheel(byte WheelPos) {
+  WheelPos = 255 - WheelPos;
+  if(WheelPos < 85) {
+    return strip.Color(255 - WheelPos * 3, 0, WheelPos * 3);
+  }
+  if(WheelPos < 170) {
+    WheelPos -= 85;
+    return strip.Color(0, WheelPos * 3, 255 - WheelPos * 3);
+  }
+  WheelPos -= 170;
+  return strip.Color(WheelPos * 3, 255 - WheelPos * 3, 0);
+}
+
+
+
+/*
+switch (light_mode) {
+        установить цвет
+        case 0: for (int i = 0; i < NUM_LEDS; i++) setPixelHSV(i, LIGHT_COLOR, LIGHT_SAT, 255);
+          break;
+
+        
+        case 1:
+          if (millis() - color_timer > COLOR_SPEED) {
+            color_timer = millis();
+            if (++this_color > 255) this_color = 0;
+          }
+          for (int i = 0; i < NUM_LEDS; i++) setPixelHSV(i, this_color, LIGHT_SAT, 255);
+          break;
+          
+        case 2:
+          if (millis() - rainbow_timer > 35) {
+            rainbow_timer = millis();
+            this_color += RAINBOW_PERIOD;
+            if (this_color > 255) this_color = 0;
+            if (this_color < 0) this_color = 255;
+          }
+          rainbow_steps = this_color;
+          for (int i = 0; i < NUM_LEDS; i++) {
+            setPixelHSV(i, (int)floor(rainbow_steps), 255, 255);
+            rainbow_steps += RAINBOW_STEP_2;
+            if (rainbow_steps > 255) rainbow_steps = 0;
+            if (rainbow_steps < 0) rainbow_steps = 255;
+          }
+          break;
+  }
+ */
+
+void setLedColor() {
+  for (int i=0; i < NUM_LEDS; i++) {
+   strip.setPixelColor(i, strip.Color(redValue, greenValue, blueValue));
+   strip.show();
+  }
+  Serial.println("Color changed");
+  delay(1000);
+}
+
+void getData() {
+  if (Firebase.getInt(firebaseData, "/mode")) {
+    if  (firebaseData.dataType() == "int") {
+      int val = firebaseData.intData();
+      if (val != currentMode) {
+        currentMode = val;
+         Serial.print("Active mode is #");
+         Serial.println(currentMode);
+      }
+    }
+  }
+
+  if (Firebase.getInt(firebaseData, "/brightness")) {
+    if  (firebaseData.dataType() == "int") {
+      int val = firebaseData.intData();
+      if (val != brightness) {
+        brightness = val;
+         strip.setBrightness(brightness);
+         Serial.print("Brightness is ");
+         Serial.println(brightness);
+      }
+    }
+  }
+
+  if (Firebase.getInt(firebaseData, "/delayTime")) {
+    if  (firebaseData.dataType() == "int") {
+      int val = firebaseData.intData();
+      if (val != delayTime) {
+        delayTime = val;
+         Serial.print("New delay is ");
+         Serial.println(delayTime);
+      }
+    }
+  }
+  
+  if (Firebase.getInt(firebaseData, "/red")) {
+    if  (firebaseData.dataType() == "int") {
+      int val = firebaseData.intData();
+      if (val != redValue) {
+        redValue = val;
+         Serial.print("New valuer for red - ");
+         Serial.println(redValue);
+      }
+    }
+  }
+ 
+  if (Firebase.getInt(firebaseData, "/green")) {
+    if  (firebaseData.dataType() == "int") {
+      int val = firebaseData.intData();
+      if (val != greenValue) {
+        greenValue = val;
+        Serial.print("New valuer for green - ");
+        Serial.println(greenValue);
+      }
+    }
+  }
+ 
+  if (Firebase.getInt(firebaseData, "/blue")) {
+    if  (firebaseData.dataType() == "int") {
+      int val = firebaseData.intData();
+      if (val != blueValue) {
+        blueValue = val;
+        Serial.print("New valuer for blue - ");
+        Serial.println(blueValue);
+      }
+    }  
+  }
+}
